@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+.env
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Data and outputs
+data/raw
+data/processed/
+outputs/
+*.mp4
+
+# IDE
+.vscode/
+.idea/
