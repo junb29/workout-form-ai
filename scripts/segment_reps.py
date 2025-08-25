@@ -13,27 +13,26 @@ L_SHO, R_SHO = 11, 12
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Segment reps from per-frame features.")
-    # Input and output path
     parser.add_argument("--features_npz",type=Path, required=True, help="Path to features.npz")
     parser.add_argument("--output_json", type=Path, required=True, help="Output path to save rep segments.")
-    # Smoothing via Savitzky-Golay filter (odd window, poly < window)
+    # Smoothing
     parser.add_argument("--savgol_window", type=int, default=7, help="Odd window length (e.g., 7). 0 disables smoothing.")
     parser.add_argument("--savgol_poly", type=int, default=2, help="Polynomial order (< window).")
     
-    parser.add_argument("--exercise", choices=["sqaut", "pushup"], required=True, help="Choose preset exercise")
-    parser.add_argument("--signal", choices=["pelvis", "shoulder", "knee"], default=None, help="Which y-position to use (pelvis/shoulder/knee). If omitted, preset decides")
-    parser.add_argument("--anchor", choices=["top", "bottom"], default=None, help="Anchor type: top=minima, bottom=maxima. If omitted, preset decides.")
-    # Selecting peaks and duration constraints
-    parser.add_argument("--min_prom", type=float, default=0.05, help="Min prominence for bottoms")
-    parser.add_argument("--min_range", type=float, default=0.1, help="Min y-range within a segment to count as a rep")
-    parser.add_argument("--min_rep_seconds", type=float, default=0.6, help="Minimum allowed rep duration in sec.")
+    parser.add_argument("--exercise", choices=["squat", "pushup"], required=True, help="Choose preset exercise")
+    parser.add_argument("--signal", choices=["pelvis", "shoulder", "knee"], default="shoulder", help="Which y-position to use (pelvis/shoulder/knee). If omitted, preset decides")
+    parser.add_argument("--anchor", choices=["top", "bottom"], default="top", help="Anchor type: top=minima, bottom=maxima. If omitted, preset decides.")
+    # Constraints
+    parser.add_argument("--min_prom", type=float, default=0.001, help="Min prominence for bottoms")
+    parser.add_argument("--min_range", type=float, default=0.15, help="Min y-range within a segment to count as a rep")
+    parser.add_argument("--min_rep_seconds", type=float, default=0.8, help="Minimum allowed rep duration in sec.")
     parser.add_argument("--max_rep_seconds", type=float, default=8.0, help="Maximum allowed rep duration in sec")
     
     parser.add_argument("--plot_png", type=Path, default=None, help="If set, save a PNG showing velocity + detected reps.")
     
     return parser.parse_args()
 
-def ypos(xy_norm: np.ndarray, name: str) -> tuple[np.ndarray, str]:
+def ypos(xy_norm, name):
     
     if name == "pelvis":
         y = 0.5 * (xy_norm[:, L_HIP, 1] + xy_norm[:, R_HIP, 1])
@@ -47,7 +46,7 @@ def ypos(xy_norm: np.ndarray, name: str) -> tuple[np.ndarray, str]:
     
     raise ValueError(f"Unknown signal name: {name}")
 
-def pick_defaults(exercise: str) -> tuple[str, str]:
+def pick_defaults(exercise):
     
     if exercise == "squat":
         return "pelvis", "bottom"
@@ -56,7 +55,7 @@ def pick_defaults(exercise: str) -> tuple[str, str]:
         return "shoulder", "top"
 
 '''
-def choose_velocity(d: np.lib.npyio.NpzFile) -> tuple[np.ndarray, str]:
+def choose_velocity(d):
     
     if "vel_pelvis" in d.files:
         return d["vel_pelvis"].astype(np.float32), "pelvis_vel"
@@ -71,14 +70,14 @@ def choose_velocity(d: np.lib.npyio.NpzFile) -> tuple[np.ndarray, str]:
     raise ValueError("No suitable velocity keys found in features (.npz)")
 '''
 
-def smooth(x: np.ndarray, win: int, poly: int) -> np.ndarray:
+def smooth(x, win, poly):
     
     if win <= 0 or x.shape[0] < max(win, poly + 2) or (win % 2 == 0) or poly >= win:
         return x
     return savgol_filter(x, window_length=win, polyorder=poly, mode="interp").astype(np.float32)
 
 '''
-def bottom_indices_from_velocity(v: np.ndarray, ts: np.ndarray, min_prom: float, min_gap_sec: float) -> np.ndarray:
+def bottom_indices_from_velocity(v, ts, min_prom, min_gap_sec):
     
     inv_v = -v
     # Average time between frames
@@ -95,13 +94,13 @@ def bottom_indices_from_velocity(v: np.ndarray, ts: np.ndarray, min_prom: float,
     return peaks
 '''
 
-def segment_by_anchor_position(y_pos: np.ndarray,
-                               ts: np.ndarray,
-                               cycle_anchor: str,
-                               min_prom: float,
-                               min_sec: float,
-                               max_sec: float,
-                               min_range: float) -> list[dict]:
+def segment_by_anchor_position(y_pos,
+                               ts,
+                               cycle_anchor,
+                               min_prom,
+                               min_sec,
+                               max_sec,
+                               min_range):
     
     T = y_pos.shape[0]
     if T == 0:
@@ -113,7 +112,7 @@ def segment_by_anchor_position(y_pos: np.ndarray,
         anchors, _ = find_peaks(-y_pos, prominence = min_prom)
     
     # If video ends as soon as the rep is done
-    def recover_tail_anchor(anchors: np.ndarray) -> np.ndarray:
+    def recover_tail_anchor(anchors):
         
         if anchors.size == 0:
             return anchors 
@@ -151,8 +150,62 @@ def segment_by_anchor_position(y_pos: np.ndarray,
     
     anchors = recover_tail_anchor(anchors)
     
-    if anchors.size < 2:
-        return []
+    def remove_plateau_anchors(y, anchors, cycle_anchor, min_prom, min_range):
+        """
+        Removes duplicate tops (or bottoms) on flat plateaus.
+        """
+        anchors = np.asarray(anchors, dtype=int)
+        if anchors.size <= 1:
+            # If first anchor is not captured, manually add first anchor
+            if anchors.size == 1:
+                keep= []
+                if cycle_anchor == "top":
+                    keep.append(int(np.argmin(y[:int(anchors[0])])))
+                else:
+                    keep.append(int(np.argmax(y[:int(anchors[0])])))
+                keep.append(int(anchors[0]))
+                return np.asarray(keep, dtype=int)
+            else:
+                return anchors
+
+        keep = [int(anchors[0])]
+        for i in range(1, anchors.size):
+            prev = keep[-1]
+            cur  = int(anchors[i])
+            seg  = y[prev:cur+1]
+            
+            gap = y.max() - y.min()
+
+            # Find the opposite extremum
+            if cycle_anchor == "top":
+                if y[cur] > y.max() - 0.30 * gap: # Remove (likely) wrong anchors
+                    continue
+                opp_rel = int(np.argmax(seg))
+                opp_val = float(seg[opp_rel])
+                prev_val, cur_val = float(y[prev]), float(y[cur])
+                amp1 = opp_val - prev_val
+                amp2 = opp_val - cur_val
+            else:
+                if y[cur] < y.min() + 0.30 * gap:
+                    continue
+                opp_rel = int(np.argmin(seg))
+                opp_val = float(seg[opp_rel])
+                prev_val, cur_val = float(y[prev]), float(y[cur])
+                amp1 = prev_val - opp_val
+                amp2 = cur_val - opp_val
+
+            rng   = float(seg.max() - seg.min())
+            prom_ok = (amp1 >= min_prom) and (amp2 >= min_prom)
+            range_ok = (rng >= min_range)
+
+            if prom_ok and range_ok:
+                keep.append(cur)
+            else:
+                pass
+
+        return np.asarray(keep, dtype=int)
+    
+    anchors = remove_plateau_anchors(y_pos, anchors, cycle_anchor, min_prom, min_range)
     
     segs = []
     for i in range(anchors.size - 1):

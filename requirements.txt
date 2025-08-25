@@ -1,1 +1,4 @@
 opencv-python
+mediapipe==0.10.14
+streamlit
+scikit-learn

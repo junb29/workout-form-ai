@@ -20,3 +20,8 @@ outputs/
 # IDE
 .vscode/
 .idea/
+
+# Misc
+run.txt
+scripts/read_video_practice.py
+scripts/app_demo.py

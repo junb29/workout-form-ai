@@ -9,21 +9,20 @@ import math
 from scipy.signal import savgol_filter
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Extract 33-keypoint pose data from a video")
+    parser = argparse.ArgumentParser(description="Extract 33 keypoint pose data from a video")
     parser.add_argument("--input_video", type=Path, required=True, help="Path to an MP4/MOV file")
     parser.add_argument("--output_path", type=Path, required=True, help="Where to save the .npz output")
     parser.add_argument("--write_overlay", action="store_true", help="Also save an overlay MP4 with skeleton drawn")
     
-    # Smoothing controls. window=0 disables. Window must be odd and >=5; poly < window.
+    # Smoothing controls (window=0 disables, window must be odd and >=5; poly < window)
     parser.add_argument("--savgol_window", type=int, default=0, help="Odd window length, e.g., 7. 0 disables smoothing.")
     parser.add_argument("--savgol_poly",   type=int, default=2, help="Polynomial order, e.g., 2. Must be < window.")
     
     return parser.parse_args()
 
-def savgol_smooth(seq: np.ndarray, window: int, poly: int) -> np.ndarray:
+def smooth(seq: np.ndarray, window: int, poly: int) -> np.ndarray:
     """
-    Smooths along time for x,y,z (columns 0..2). Visibility (col 3) left unchanged.
-    seq: (T, 33, 4)  -> returns (T, 33, 4)
+    Smooths along time for x,y,z (columns 0, 1, 2), visibility (col 3) left unchanged
     """
     if window <= 0 or seq.shape[0] < max(window, poly + 2) or (window % 2 == 0):
         return seq
@@ -67,11 +66,11 @@ def main():
         - out_path: path to overlay video (may end .avi if we had to fallback)
         """
 
-        # 1) Build a resizing function that keeps aspect ratio and enforces even dims
+        # Resize to keep aspect ratio and enforces even dims
         def compute_target_size(h, w, max_long=1920):
             long_side = max(h, w)
             scale = 1.0 if long_side <= max_long else (max_long / long_side)
-            new_w = int(math.floor((w * scale) / 2) * 2) or 2   # ensure even & nonzero
+            new_w = int(math.floor((w * scale) / 2) * 2) or 2 
             new_h = int(math.floor((h * scale) / 2) * 2) or 2
             return new_w, new_h
 
@@ -81,7 +80,6 @@ def main():
         def resize_fn(img):
             return cv2.resize(img, (tw, th), interpolation=cv2.INTER_AREA)
 
-        # 2) Try avc1 in mp4, then mp4v in mp4, then MJPG in avi (last resort)
         fps_out = float(fps_val) if (fps_val and fps_val > 0) else 25.0
         trials = [
             ("mp4", "avc1", path.with_suffix(".overlay.mp4")),  # H.264 (best for QuickTime)
@@ -152,7 +150,7 @@ def main():
     keypoints = np.stack(keypoints, axis = 0)
     timestamps = np.asarray(timestamps, dtype = np.float32)
     
-    keypoints_sm = savgol_smooth(keypoints, args.savgol_window, args.savgol_poly)
+    keypoints_sm = smooth(keypoints, args.savgol_window, args.savgol_poly)
     
     args.output_path.parent.mkdir(parents = True, exist_ok = True)
     np.savez_compressed(
