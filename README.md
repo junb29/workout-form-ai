@@ -82,13 +82,6 @@ workout-form-ai/
     model/       # Logistic Regression model
 ```
 
-## Technical Stack
-
-- Python 3.11, virtualenv via pyenv
-- Libraries: mediapipe==0.10.14, opencv-python, numpy, scipy, scikit-learn, pandas, streamlit, mlx-lm
-- Hardware: Apple MacBook Pro (M3 Pro)
-- All computation fully local (no cloud GPUs required)
-
 ## Next Steps
 
 - Expand dataset to more exercises (squats, bench press, pull ups, ...).
