@@ -40,7 +40,7 @@ It combines pose estimation, rule-based heuristics, and machine learning baselin
    ```
 6. **Streamlit Demo**
    ```bash
-   streamlit run app_demo.py
+   streamlit run demo.py
    ```
 
 ## Results
