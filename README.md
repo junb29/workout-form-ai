@@ -3,6 +3,13 @@
 Workout Form AI is a local, end-to-end pipeline for detecting exercise form faults in bodyweight workouts (push-ups for now) from raw video. 
 It combines pose estimation, rule-based heuristics, and machine learning baselines, with a Streamlit demo and a fine-tuned LLM for personalized coaching feedback.
 
+## Live
+
+- **Live at**: [workout_form_ai](http://44.205.60.127) (Chrome)
+
+Note : Docker + AWS (EC2) for public deployment
+For use in safari, access 44.205.60.127 (no http://)
+
 ## Features
 
 - **Pose Extraction**: Uses MediaPipe BlazePose to extract 2D skeletons from video frames, with optional smoothing. 
