@@ -7,8 +7,9 @@ It combines pose estimation, rule-based heuristics, and machine learning baselin
 
 - **Live at**: [workout_form_ai](http://44.205.60.127) (Chrome)
 
-Note : Docker + AWS (EC2) for public deployment
-For use in safari, access 44.205.60.127 (no http://)
+
+- Note : Docker + AWS (EC2) for public deployment
+- For use in safari, access 44.205.60.127 (no http://)
 
 ## Features
 
